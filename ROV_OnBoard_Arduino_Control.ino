@@ -7,6 +7,10 @@
  modified on 8 Nov 2013
  by Scott Fitzgerald
  http://www.arduino.cc/en/Tutorial/Knob
+
+ sudo usermod -a -G tty yourUserName
+ sudo usermod -a -G dialout yourUserName
+ 
 */
 
 // Servo SAMWA SM-394 pinout
@@ -31,7 +35,8 @@ enum commands {
   LeftReverse   = 76,
   RightSpeed    = 77,
   LeftSpeed     = 78,
-  UpDownServo   = 79
+  FrontThruster = 79,
+  BackThruster  = 80
 };
 char command;
 
@@ -50,13 +55,16 @@ char EOS  = char(127);
 // For pins 3, 9, 10, 11 it is approximately 488 Hz.
 // For pins 5 and 6, it is about 977 Hz.
 // These values are for a stock Arduino running at 16MHz.
+
 // You can change these frequencies easily by writing new values to the appropriate timer register.
 // For example, to change the frequency of timer 2, which controls pins 9 and 10, to 3906 Hz
 // you would set its register like so:
 // TCCR1B = TCCR1B & 0b11111000 | 0x02;
+
 // The PWM outputs generated on pins 5 and 6 will have higher-than-expected duty cycles.
 // This is because of interactions with the millis() and delay() functions, which share the same
 // internal timer used to generate those PWM outputs.
+
 // This will be noticed mostly on low duty-cycle settings (e.g 0 - 10) and may result in a value
 // of 0 not fully turning off the output on pins 5 and 6.
 
@@ -66,18 +74,20 @@ int leftMotorReversePin  = 4;
 int rightMotorForwardPin = 7;
 int rightMotorReversePin = 8;
 
-int servo1Pin            = 9;// PWM Pins on Nano: 3, 5, 6, 9, 10, and 11
-int leftMotorSpeedPin    = 3;// PWM Out
-int rightMotorSpeedPin   = 5;// PWM Out
+int FrontThrusterPin     = 9; // PWM Pins on Nano: 3, 5, 6, 9, 10, and 11
+int BackThrusterPin      = 10;// PWM Out
+int leftMotorSpeedPin    = 3; // PWM Out
+int rightMotorSpeedPin   = 5; // PWM Out
 int inValvePin           = 13;
 int outValvePin          = 12;
 
-// SDA to I2C Data
-// SCL to I2C Clock
-// Adafruit_MCP4725 leftMotorSpeed;          // create a DAC object to control the left Motor Speed
-// Adafruit_MCP4725 rightMotorSpeed;         // create a DAC object to control the right Motor Speed
+// Pins used: 2, 3, 4, 5, 7, 8, 9, 10, 12, 13
 
-Servo            servo1;                  // create servo object to control a servo
+Servo            F_Thruster;           // create servo object to control the Front Thruster
+Servo            B_Thruster;            // create servo object to control the Back Thruster
+
+int minThruster = 1100; // In microseconds
+int maxThruster = 1900; // In microseconds
 
 String           inputString = "";        // a string to hold incoming data
 boolean          stringComplete = false;  // whether the string is complete
@@ -86,6 +96,14 @@ long             baudRate = 115200;
 
 void 
 setup() {
+
+  // attach(pin, min, max) - Attaches to a pin setting min and max values in microseconds
+  // default min is 544, max is 2400
+  F_Thruster.attach(FrontThrusterPin, minThruster, maxThruster); // Attaches the Front Thruster on pin 9 to the servo object
+  F_Thruster.writeMicroseconds(1500);                            // Sets the initialization ESC value.
+  B_Thruster.attach(BackThrusterPin, minThruster, maxThruster);  // Attaches the Back Thruster on pin 10 to the servo object
+  B_Thruster.writeMicroseconds(1500);                            // Sets the initialization ESC value.
+
   // Pins to control the motors
   pinMode(leftMotorForwardPin,   OUTPUT);
   pinMode(leftMotorReversePin,   OUTPUT);
@@ -112,24 +130,10 @@ setup() {
   digitalWrite(inValvePin,  LOW); 
   digitalWrite(outValvePin, LOW);
 
-  // For Adafruit MCP4725A1 the address is 0x62 (default) or 0x63 (ADDR pin tied to VCC)
-  // For MCP4725A0 the address is 0x60 or 0x61
-  // For MCP4725A2 the address is 0x64 or 0x65
-//  leftMotorSpeed.begin(0x62);
-//  rightMotorSpeed.begin(0x63);
-
-//  leftMotorSpeed.setVoltage((uint32_t)0, false);
-//  rightMotorSpeed.setVoltage((uint32_t)0, false);
-
-  // attach(pin, min, max) - Attaches to a pin setting min and max values in microseconds
-  // default min is 544, max is 2400
-  servo1.attach(servo1Pin);           // Attaches the servo on pin 9 to the servo object
-  servo1.write(90);                   // Sets the servo angle in degrees.
-                                      // (invalid angle that is valid as pulse in microseconds is treated as microseconds)
-                                      // sets the servo position as NEUTRAL (in the range 0-180)
-
   Serial.begin(baudRate, SERIAL_8N1); // initialize serial: 8 data bits, no parity, one stop bit.
   inputString.reserve(200);           // reserve 200 bytes for the inputString:
+
+  delay(1000);                        // Wait for the ESC to initialize
 }
 
 
@@ -165,9 +169,15 @@ executeCommand(String inputString) {
   command = inputString.charAt(0);
   int value = inputString.charAt(1);// Get the value
   
-  if(command == char(UpDownServo)) {// Up Down Servo position 
-    value = map(value, -10, 10, 0, 180); // scale it to use it with the servo (value between 0 and 180) 
-    servo1.write(value);                 // sets the servo position according to the scaled value 
+  if(command == char(FrontThruster)) {   // Up Down Servo position 
+    value = map(value, -10, 10, minThruster, maxThruster); // scale it to use it with the ESC
+    F_Thruster.write(value);                            // sets the servo position according to the scaled value 
+    Serial.print(ACK);
+  } 
+  
+  if(command == char(BackThruster)) {// Up Down Servo position 
+    value = map(value, -10, 10, minThruster, maxThruster); // scale it to use it with the ESC
+    B_Thruster.write(value);                            // sets the servo position according to the scaled value 
     Serial.print(ACK);
   } 
   
