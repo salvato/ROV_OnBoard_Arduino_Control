@@ -19,8 +19,8 @@
 // Pin 3 +5 V
 
 #include <Servo.h>
-//#include <Wire.h>
-//#include <Adafruit_MCP4725.h>
+#include <Wire.h>
+#include "MS5837.h"
 
 void    serialEvent();
 void    executeCommand(String inputString);
@@ -36,7 +36,8 @@ enum commands {
   RightSpeed    = 77,
   LeftSpeed     = 78,
   FrontThruster = 79,
-  BackThruster  = 80
+  BackThruster  = 80,
+  GetDepth      = 81
 };
 char command;
 
@@ -85,6 +86,7 @@ int outValvePin          = 12;
 
 Servo            F_Thruster;           // create servo object to control the Front Thruster
 Servo            B_Thruster;            // create servo object to control the Back Thruster
+MS5837           depthSensor;
 
 int minThruster = 1100; // In microseconds
 int maxThruster = 1900; // In microseconds
@@ -93,6 +95,8 @@ String           inputString = "";        // a string to hold incoming data
 boolean          stringComplete = false;  // whether the string is complete
 long             baudRate = 115200;
 
+int seaWaterDensity   = 1029;             // Kg/m^3
+int freshWaterDensity =  997;             // Kg/m^3
 
 void 
 setup() {
@@ -133,7 +137,12 @@ setup() {
   Serial.begin(baudRate, SERIAL_8N1); // initialize serial: 8 data bits, no parity, one stop bit.
   inputString.reserve(200);           // reserve 200 bytes for the inputString:
 
+  Wire.begin();
+  depthSensor.init();
+  depthSensor.setFluidDensity(seaWaterDensity);
+  
   delay(1000);                        // Wait for the ESC to initialize
+
 }
 
 
@@ -239,6 +248,16 @@ executeCommand(String inputString) {
     else
       digitalWrite(outValvePin, LOW);
     Serial.print(ACK);
+  }
+
+  else if(command == char(GetDepth)) {// Get ROV Depth
+    depthSensor.read();
+    int depth = int(depthSensor.depth()*100.0);// depth expressed in cm
+    Serial.print(ACK);
+    for(int i=0; i<4; i++) {
+      Serial.print(char(depth & 0x0F));
+      depth = depth >> 4;
+    }
   }
   
   else if(command == char(AreYouThere)) {// Are you ? 
