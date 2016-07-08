@@ -45,8 +45,13 @@ char ACK  = 6;
 char NACK = 21;
 char EOS  = char(127);
 
+// Serial port communicates on digital pins 0 (RX) and 1 (TX) as well as with the computer via USB. 
+// Thus, since we use these functions, we cannot also use pins 0 and 1 for digital input or output. 
+
 // SPI on Nano: 10 (SS), 11 (MOSI), 12 (MISO), 13 (SCK)
+
 // I2C on Nano: A4 (SDA) and A5 (SCL)
+
 // The Nano has 8 analog inputs, each of which provide 10 bits of resolution.
 // By default they measure from ground to 5 volts, though is it possible to
 // change the upper end of their range using the analogReference() function.
@@ -69,6 +74,10 @@ char EOS  = char(127);
 // This will be noticed mostly on low duty-cycle settings (e.g 0 - 10) and may result in a value
 // of 0 not fully turning off the output on pins 5 and 6.
 
+// Serial pins
+int SerialTX             = 0;
+int SerialRX             = 1;
+
 // Motor control pins
 int leftMotorForwardPin  = 2;
 int leftMotorReversePin  = 4;
@@ -82,11 +91,10 @@ int rightMotorSpeedPin   = 5; // PWM Out
 int inValvePin           = 13;
 int outValvePin          = 12;
 
-// Pins used: 2, 3, 4, 5, 7, 8, 9, 10, 12, 13
+// Pins used: 0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, A4, A5
 
 Servo            F_Thruster;           // create servo object to control the Front Thruster
-Servo            B_Thruster;            // create servo object to control the Back Thruster
-MS5837           depthSensor;
+Servo            B_Thruster;           // create servo object to control the Back Thruster
 
 int minThruster = 1100; // In microseconds
 int maxThruster = 1900; // In microseconds
@@ -95,12 +103,13 @@ String           inputString = "";        // a string to hold incoming data
 boolean          stringComplete = false;  // whether the string is complete
 long             baudRate = 115200;
 
+MS5837           depthSensor;
+
 int seaWaterDensity   = 1029;             // Kg/m^3
 int freshWaterDensity =  997;             // Kg/m^3
 
 void 
 setup() {
-
   // attach(pin, min, max) - Attaches to a pin setting min and max values in microseconds
   // default min is 544, max is 2400
   F_Thruster.attach(FrontThrusterPin, minThruster, maxThruster); // Attaches the Front Thruster on pin 9 to the servo object
@@ -137,12 +146,12 @@ setup() {
   Serial.begin(baudRate, SERIAL_8N1); // initialize serial: 8 data bits, no parity, one stop bit.
   inputString.reserve(200);           // reserve 200 bytes for the inputString:
 
+  // I2c devices (just depth sensor for now)
   Wire.begin();
   depthSensor.init();
   depthSensor.setFluidDensity(seaWaterDensity);
   
   delay(1000);                        // Wait for the ESC to initialize
-
 }
 
 
@@ -251,7 +260,7 @@ executeCommand(String inputString) {
   }
 
   else if(command == char(GetDepth)) {// Get ROV Depth
-    depthSensor.read();
+    depthSensor.read();// The read from I2C takes up for 40 ms, so use sparingly if possible.
     int depth = int(depthSensor.depth()*100.0);// depth expressed in cm
     Serial.print(ACK);
     for(int i=0; i<4; i++) {
